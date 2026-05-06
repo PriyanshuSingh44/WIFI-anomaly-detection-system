@@ -79,8 +79,8 @@ def capture_real_traffic_window(iface: str, duration: float = config.CAPTURE_INT
     try:
         from scapy.all import sniff, IP, TCP, UDP, ICMP
     except ImportError:
-        logger.error("[LIVE] Scapy not available — falling back to simulation.")
-        return generate_traffic_window()
+        logger.error("[LIVE] Scapy not available — please install scapy.")
+        return [], None
 
     try:
         # Try Layer-2 sniff first (requires Npcap with raw socket access)
@@ -97,8 +97,8 @@ def capture_real_traffic_window(iface: str, duration: float = config.CAPTURE_INT
                 L2socket=scapy_conf.L3socket,   # Layer-3 fallback
             )
         except Exception as exc2:
-            logger.error(f"[LIVE] L3 sniff also failed: {exc2} — falling back to simulation.")
-            return generate_traffic_window()
+            logger.error(f"[LIVE] L3 sniff also failed: {exc2} — capture failed. Ensure you are running as Administrator.")
+            return [], None
 
     if not raw_pkts:
         logger.warning(f"[LIVE] No packets captured on '{iface}' in {duration}s — check NIC name & admin rights.")

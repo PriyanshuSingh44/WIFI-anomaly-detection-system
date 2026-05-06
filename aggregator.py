@@ -154,6 +154,14 @@ def set_mode():
     mode  = body.get("mode", "").strip().lower()
     iface = body.get("iface", "").strip() or None
     try:
+        if mode == "live":
+            # Quick permission check before allowing the switch
+            try:
+                from scapy.all import sniff
+                sniff(iface=iface or config.WIFI_INTERFACE, timeout=0.1)
+            except Exception as e:
+                return jsonify({"error": "Requires Admin Rights & Npcap"}), 403
+
         old_mode = get_capture_mode()
         set_capture_mode(mode, iface)
 
