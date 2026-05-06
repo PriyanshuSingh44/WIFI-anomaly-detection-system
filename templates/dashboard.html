@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Wi-Fi Anomaly Detection — Live Dashboard</title>
+<meta name="description" content="Real-time distributed anomaly detection dashboard for public Wi-Fi networks."/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+<style>
+:root{
+  --bg:#060b14;--surface:#0d1526;--surface2:#121d35;--border:#1e2f52;
+  --accent:#3b82f6;--accent2:#06b6d4;--danger:#ef4444;--warn:#f59e0b;
+  --success:#10b981;--text:#e2e8f0;--muted:#64748b;--radius:12px;
+  --glow:0 0 20px rgba(59,130,246,.35);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh;overflow-x:hidden}
+
+/* ── Header ── */
+header{display:flex;align-items:center;justify-content:space-between;padding:18px 32px;background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100;backdrop-filter:blur(12px)}
+.logo{display:flex;align-items:center;gap:12px}
+.logo-icon{width:36px;height:36px;background:linear-gradient(135deg,var(--accent),var(--accent2));border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px}
+.logo h1{font-size:1.1rem;font-weight:700;background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
+.logo small{font-size:.7rem;color:var(--muted);font-weight:400}
+.header-right{display:flex;align-items:center;gap:16px}
+#status-badge{display:flex;align-items:center;gap:6px;padding:6px 14px;border-radius:999px;font-size:.78rem;font-weight:600;background:rgba(16,185,129,.12);color:var(--success);border:1px solid rgba(16,185,129,.3)}
+#status-badge .dot{width:7px;height:7px;border-radius:50%;background:var(--success);animation:pulse 1.4s infinite}
+#model-badge{padding:5px 12px;border-radius:999px;font-size:.75rem;background:rgba(59,130,246,.12);color:var(--accent);border:1px solid rgba(59,130,246,.3);font-family:'JetBrains Mono',monospace}
+
+/* ── Mode Toggle ── */
+.mode-toggle{display:flex;align-items:center;gap:0;border-radius:999px;overflow:hidden;border:1px solid var(--border);background:var(--surface2)}
+.mode-btn{padding:5px 14px;font-size:.75rem;font-weight:600;border:none;background:transparent;color:var(--muted);cursor:pointer;transition:background .2s,color .2s;font-family:'Inter',sans-serif;white-space:nowrap}
+.mode-btn.active{background:var(--accent);color:#fff}
+.mode-btn.live-active{background:var(--success);color:#fff}
+#mode-badge{padding:5px 12px;border-radius:999px;font-size:.75rem;font-family:'JetBrains Mono',monospace;font-weight:600;transition:background .3s,color .3s}
+#mode-badge.sim{background:rgba(59,130,246,.12);color:var(--accent);border:1px solid rgba(59,130,246,.3)}
+#mode-badge.live{background:rgba(16,185,129,.12);color:var(--success);border:1px solid rgba(16,185,129,.3)}
+
+/* ── Iface Panel ── */
+#iface-panel{grid-column:span 4;display:flex;align-items:center;gap:12px;background:rgba(16,185,129,.06);border:1px solid rgba(16,185,129,.25);border-radius:var(--radius);padding:12px 20px;font-size:.82rem}
+#iface-panel.hidden{display:none}
+#iface-panel label{color:var(--muted);white-space:nowrap}
+#iface-select{background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:4px 10px;font-size:.8rem;font-family:'JetBrains Mono',monospace;cursor:pointer;min-width:160px}
+#iface-apply{padding:5px 16px;border-radius:6px;border:none;background:var(--success);color:#fff;font-size:.78rem;font-weight:600;cursor:pointer;transition:opacity .2s}
+#iface-apply:hover{opacity:.85}
+#live-warn{color:var(--warn);font-size:.78rem}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* ── Grid ── */
+main{padding:24px 32px;display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+
+/* ── KPI Cards ── */
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;position:relative;overflow:hidden;transition:transform .2s,box-shadow .2s}
+.kpi:hover{transform:translateY(-2px);box-shadow:var(--glow)}
+.kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--kpi-color,var(--accent))}
+.kpi-label{font-size:.72rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.kpi-value{font-size:2.2rem;font-weight:900;margin:8px 0 4px;line-height:1;color:var(--kpi-color,var(--text))}
+.kpi-sub{font-size:.75rem;color:var(--muted)}
+.kpi-icon{position:absolute;right:16px;top:50%;transform:translateY(-50%);font-size:2.4rem;opacity:.12}
+
+/* ── Charts ── */
+.chart-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;grid-column:span 2}
+.card-title{font-size:.82rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.card-title::before{content:'';width:3px;height:14px;background:var(--accent);border-radius:2px;display:inline-block}
+canvas{width:100%!important;max-height:220px}
+
+/* ── Alert Feed ── */
+.alert-feed{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;grid-column:span 2;max-height:400px;overflow-y:auto}
+.alert-feed::-webkit-scrollbar{width:5px}
+.alert-feed::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+
+.alert-item{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:start;padding:12px;border-radius:8px;background:var(--surface2);margin-bottom:8px;border-left:3px solid var(--danger);animation:slideIn .3s ease}
+@keyframes slideIn{from{opacity:0;transform:translateX(-10px)}to{opacity:1;transform:none}}
+.alert-sev{width:8px;height:8px;border-radius:50%;background:var(--danger);margin-top:5px;flex-shrink:0;box-shadow:0 0 8px var(--danger)}
+
+.alert-node{font-size:.8rem;font-weight:700;color:var(--danger)}
+.alert-meta{font-size:.72rem;color:var(--muted);margin-top:2px;font-family:'JetBrains Mono',monospace}
+.alert-score{font-size:.78rem;font-weight:600;color:var(--warn);font-family:'JetBrains Mono',monospace;white-space:nowrap}
+.no-alerts{text-align:center;color:var(--muted);font-size:.85rem;padding:40px 0}
+
+/* ── Node Status Grid ── */
+.node-grid{grid-column:span 4;display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
+.node-card{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px;transition:border-color .3s}
+.node-card.anomaly{border-color:var(--danger);background:rgba(239,68,68,.05)}
+.node-card.ok{border-color:rgba(16,185,129,.3)}
+.node-name{font-size:.8rem;font-weight:700;margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.node-dot{width:8px;height:8px;border-radius:50%;background:var(--success)}
+.node-card.anomaly .node-dot{background:var(--danger);box-shadow:0 0 6px var(--danger)}
+.node-stat{font-size:.72rem;color:var(--muted);display:flex;justify-content:space-between;margin-top:4px}
+.node-stat span{color:var(--text);font-family:'JetBrains Mono',monospace}
+
+/* ── Training Banner ── */
+#training-banner{grid-column:span 4;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:var(--radius);padding:14px 20px;display:flex;align-items:center;gap:12px;font-size:.85rem;color:var(--warn)}
+#training-banner.hidden{display:none}
+.spinner{width:18px;height:18px;border:2px solid rgba(245,158,11,.3);border-top-color:var(--warn);border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+@media(max-width:900px){main{grid-template-columns:repeat(2,1fr);padding:16px}.kpi,.chart-card,.alert-feed,.node-grid{grid-column:span 2}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">🛡️</div>
+    <div>
+      <h1>Wi-Fi Anomaly Detection</h1>
+      <small>Self-Learning Distributed IDS</small>
+    </div>
+  </div>
+  <div class="header-right">
+    <span id="model-badge">IsolationForest</span>
+    <!-- Mode badge -->
+    <span id="mode-badge" class="sim">● SIM</span>
+    <!-- Mode toggle -->
+    <div class="mode-toggle">
+      <button class="mode-btn active" id="btn-sim" onclick="switchMode('simulated')">🎲 Simulated</button>
+      <button class="mode-btn" id="btn-live" onclick="switchMode('live')">📡 Live Wi-Fi</button>
+    </div>
+    <div id="status-badge"><span class="dot"></span>LIVE</div>
+  </div>
+</header>
+
+<main>
+
+  <!-- Iface Selector (shown only in live mode) -->
+  <div id="iface-panel" class="hidden">
+    <span>📡</span>
+    <label for="iface-select">Wi-Fi Interface:</label>
+    <select id="iface-select"><option>Wi-Fi</option></select>
+    <button id="iface-apply" onclick="applyIface()">Apply</button>
+    <span id="live-warn">⚠️ Requires Npcap + run as Administrator</span>
+  </div>
+
+  <!-- Training Banner -->
+  <div id="training-banner">
+    <div class="spinner"></div>
+    <span>Collecting baseline traffic — model will activate after <strong id="samples-needed">…</strong> samples…</span>
+  </div>
+
+  <!-- KPI Cards -->
+  <div class="kpi" style="--kpi-color:var(--accent)">
+    <div class="kpi-icon">📡</div>
+    <div class="kpi-label">Total Windows</div>
+    <div class="kpi-value" id="kpi-total">0</div>
+    <div class="kpi-sub">Feature vectors ingested</div>
+  </div>
+
+  <div class="kpi" style="--kpi-color:var(--danger)">
+    <div class="kpi-icon">🚨</div>
+    <div class="kpi-label">Anomalies</div>
+    <div class="kpi-value" id="kpi-anomalies">0</div>
+    <div class="kpi-sub">Detected this session</div>
+  </div>
+
+  <div class="kpi" style="--kpi-color:var(--warn)">
+    <div class="kpi-icon">📊</div>
+    <div class="kpi-label">Anomaly Rate</div>
+    <div class="kpi-value" id="kpi-rate">0%</div>
+    <div class="kpi-sub">of all traffic windows</div>
+  </div>
+
+  <div class="kpi" style="--kpi-color:var(--success)">
+    <div class="kpi-icon">🧠</div>
+    <div class="kpi-label">Buffer</div>
+    <div class="kpi-value" id="kpi-buffer">0</div>
+    <div class="kpi-sub">Samples in rolling window</div>
+  </div>
+
+  <!-- Score Timeline Chart -->
+  <div class="chart-card">
+    <div class="card-title">Anomaly Score Timeline</div>
+    <canvas id="scoreChart"></canvas>
+  </div>
+
+  <!-- Protocol Pie Chart -->
+  <div class="chart-card">
+    <div class="card-title">Protocol Distribution (Live)</div>
+    <canvas id="protoChart"></canvas>
+  </div>
+
+  <!-- Alert Feed -->
+  <div class="alert-feed">
+    <div class="card-title">Live Alert Feed</div>
+    <div id="alert-list"><div class="no-alerts">No anomalies detected yet ✅</div></div>
+  </div>
+
+  <!-- Packet-size Histogram -->
+  <div class="chart-card" style="grid-column:span 2">
+    <div class="card-title">Mean Packet Size per Window</div>
+    <canvas id="pktChart"></canvas>
+  </div>
+
+  <!-- Node Status -->
+  <div class="node-grid" id="node-grid">
+    <!-- Populated by JS -->
+  </div>
+
+</main>
+
+<script>
+const socket = io();
+const MAX_POINTS = 60;
+
+// ── Chart helpers ──────────────────────────────────────────────────────
+const mkLine = (id, label, color) => new Chart(document.getElementById(id).getContext('2d'),{
+  type:'line',
+  data:{labels:[],datasets:[{label,data:[],borderColor:color,backgroundColor:color+'22',borderWidth:2,pointRadius:2,tension:.35,fill:true}]},
+  options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+    scales:{x:{display:false},y:{grid:{color:'#1e2f52'},ticks:{color:'#64748b',font:{size:10}}}},
+    animation:{duration:300}}
+});
+
+const scoreChart = mkLine('scoreChart','Score','#3b82f6');
+const pktChart   = mkLine('pktChart','Mean PKT Size','#06b6d4');
+
+const protoChart = new Chart(document.getElementById('protoChart').getContext('2d'),{
+  type:'doughnut',
+  data:{labels:['TCP','UDP','ICMP','HTTP'],datasets:[{data:[60,25,10,5],
+    backgroundColor:['#3b82f6','#06b6d4','#f59e0b','#10b981'],borderWidth:0}]},
+  options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#e2e8f0',font:{size:11}}}},
+    cutout:'65%',animation:{duration:400}}
+});
+
+function push(chart, label, value){
+  const d = chart.data;
+  d.labels.push(label); d.datasets[0].data.push(value);
+  if(d.labels.length>MAX_POINTS){d.labels.shift();d.datasets[0].data.shift();}
+  chart.update('none');
+}
+
+// ── Threshold line (anomaly boundary) ─────────────────────────────────
+function addThresholdAnnotation(chart, thresh){
+  if(!thresh) return;
+  const ds = chart.data.datasets;
+  if(ds.length<2){
+    ds.push({label:'Threshold',data:[],borderColor:'#ef4444',borderDash:[4,4],
+      borderWidth:1.5,pointRadius:0,fill:false});
+  }
+  const n = chart.data.labels.length;
+  chart.data.datasets[1].data = Array(n).fill(thresh);
+  chart.update('none');
+}
+
+// ── Nodes state ───────────────────────────────────────────────────────
+const nodeState = {};
+function renderNodes(){
+  const grid = document.getElementById('node-grid');
+  grid.innerHTML='';
+  Object.entries(nodeState).forEach(([nid,s])=>{
+    const anomaly = s.anomaly_rate>15;
+    grid.innerHTML+=`
+    <div class="node-card ${anomaly?'anomaly':'ok'}">
+      <div class="node-name"><span class="node-dot"></span>${nid}</div>
+      <div class="node-stat">Windows <span>${s.total}</span></div>
+      <div class="node-stat">Anomalies <span>${s.anomalies}</span></div>
+      <div class="node-stat">Rate <span>${s.anomaly_rate}%</span></div>
+    </div>`;
+  });
+}
+
+// ── Alert feed ────────────────────────────────────────────────────────
+let alertCount = 0;
+function addAlert(a){
+  alertCount++;
+  const list = document.getElementById('alert-list');
+  const no   = list.querySelector('.no-alerts');
+  if(no) no.remove();
+
+  const gt = a.ground_truth && a.ground_truth!=='normal' ? ` [${a.ground_truth}]` : '';
+  const ts = new Date(a.timestamp).toLocaleTimeString();
+  const div = document.createElement('div');
+  div.className = 'alert-item';
+  div.innerHTML = `
+    <span class="alert-sev"></span>
+    <div class="alert-body">
+      <div class="alert-node">🚨 ${a.node_id}${gt}</div>
+      <div class="alert-meta">${ts} · score ${a.score?.toFixed(4)??'N/A'}</div>
+    </div>
+    <div class="alert-score">⚡ ${a.score?.toFixed(4)??'?'}</div>`;
+  list.insertBefore(div, list.firstChild);
+  if(list.children.length>50) list.removeChild(list.lastChild);
+}
+
+// ── Socket events ─────────────────────────────────────────────────────
+socket.on('new_alert', addAlert);
+
+socket.on('stats_update', s=>{
+  document.getElementById('kpi-total').textContent     = s.total_windows;
+  document.getElementById('kpi-anomalies').textContent = s.total_anomalies;
+  document.getElementById('kpi-rate').textContent      = s.anomaly_rate+'%';
+  document.getElementById('kpi-buffer').textContent    = s.buffer_size;
+  document.getElementById('model-badge').textContent   = s.model;
+
+  const banner = document.getElementById('training-banner');
+  const minSamples = s.min_samples || 80;
+  if(s.is_trained || s.buffer_size >= minSamples) banner.classList.add('hidden');
+  else {
+    banner.classList.remove('hidden');
+    document.getElementById('samples-needed').textContent = Math.max(0, minSamples - s.buffer_size);
+  }
+
+  // Sync mode badge from server
+  if(s.capture_mode) applyModeUI(s.capture_mode, s.capture_iface);
+
+  // Node cards
+  Object.entries(s.by_node||{}).forEach(([nid,ns])=>{
+    nodeState[nid]={
+      total: ns.total,
+      anomalies: ns.anomalies,
+      anomaly_rate: ns.total? Math.round(ns.anomalies/ns.total*100):0
+    };
+  });
+  renderNodes();
+});
+
+socket.on('mode_changed', ({mode, iface})=>{
+  applyModeUI(mode, iface);
+  // Show toast
+  showToast(mode === 'live'
+    ? `📡 Switched to LIVE capture on ${iface}`
+    : '🎲 Switched to Simulated mode');
+});
+
+// ── Poll /api/recent every 2 s for charts ─────────────────────────────
+async function fetchRecent(){
+  try{
+    const r = await fetch('/api/recent?n=60');
+    const data = await r.json();
+    if(!data.length) return;
+
+    // Score chart
+    const scores = data.map(d=>d.score??null).filter(v=>v!==null);
+    const thresh = data[data.length-1]?.threshold??null;
+    scoreChart.data.labels = data.map((_,i)=>i);
+    scoreChart.data.datasets[0].data = data.map(d=>d.score??null);
+    addThresholdAnnotation(scoreChart, thresh);
+
+    // Pkt size chart
+    pktChart.data.labels = data.map((_,i)=>i);
+    pktChart.data.datasets[0].data = data.map(d=>d.mean_pkt_size??0);
+    pktChart.update('none');
+
+    // Protocol donut averages
+    const n = data.length||1;
+    protoChart.data.datasets[0].data = [
+      data.reduce((a,d)=>a+(d.proto_tcp_ratio??0),0)/n*100,
+      data.reduce((a,d)=>a+(d.proto_udp_ratio??0),0)/n*100,
+      data.reduce((a,d)=>a+(d.proto_icmp_ratio??0),0)/n*100,
+      data.reduce((a,d)=>a+(d.proto_http_ratio??0),0)/n*100,
+    ];
+    protoChart.update('none');
+  }catch(e){console.warn('fetch error',e);}
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────
+fetchRecent();
+setInterval(fetchRecent, 2000);
+
+// Pre-populate alerts from /api/alerts
+fetch('/api/alerts?limit=20').then(r=>r.json()).then(list=>list.reverse().forEach(addAlert)).catch(()=>{});
+
+// ── Mode switching ────────────────────────────────────────────────────
+function applyModeUI(mode, iface){
+  const badge  = document.getElementById('mode-badge');
+  const btnSim = document.getElementById('btn-sim');
+  const btnLive= document.getElementById('btn-live');
+  const panel  = document.getElementById('iface-panel');
+
+  if(mode === 'live'){
+    badge.textContent = '● LIVE';
+    badge.className   = 'live';
+    btnSim.classList.remove('active');
+    btnLive.classList.remove('active');
+    btnLive.classList.add('live-active');
+    panel.classList.remove('hidden');
+    if(iface){
+      const sel = document.getElementById('iface-select');
+      // Select matching option if it exists, else add it
+      let found = [...sel.options].find(o=>o.value===iface);
+      if(!found){ const o=new Option(iface,iface); sel.add(o); found=o; }
+      sel.value = iface;
+    }
+  } else {
+    badge.textContent = '● SIM';
+    badge.className   = 'sim';
+    btnLive.classList.remove('live-active','active');
+    btnSim.classList.add('active');
+    panel.classList.add('hidden');
+  }
+}
+
+async function switchMode(mode){
+  if(mode === 'live'){
+    // Fetch available interfaces first
+    try{
+      const r    = await fetch('/api/mode');
+      const data = await r.json();
+      const sel  = document.getElementById('iface-select');
+      sel.innerHTML = '';
+      const ifaces  = data.ifaces && data.ifaces.length ? data.ifaces : ['Wi-Fi'];
+      ifaces.forEach(i=>{ const o=new Option(i,i); sel.add(o); });
+      // Pre-select current iface
+      if(data.iface) sel.value = data.iface;
+    }catch(e){ console.warn('Could not fetch ifaces', e); }
+  }
+  const body = { mode };
+  if(mode === 'live'){
+    body.iface = document.getElementById('iface-select').value;
+  }
+  try{
+    const res = await fetch('/api/mode',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(body)
+    });
+    const j = await res.json();
+    if(!res.ok) showToast('❌ ' + (j.error||'Failed'), true);
+    // applyModeUI will be called by the mode_changed socket event
+  }catch(e){ showToast('❌ Network error', true); }
+}
+
+async function applyIface(){
+  const iface = document.getElementById('iface-select').value;
+  try{
+    const res = await fetch('/api/mode',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({mode:'live', iface})
+    });
+    const j = await res.json();
+    if(!res.ok) showToast('❌ ' + (j.error||'Failed'), true);
+  }catch(e){ showToast('❌ Network error', true); }
+}
+
+// ── Toast notification ────────────────────────────────────────────────
+function showToast(msg, isError=false){
+  let t = document.getElementById('_toast');
+  if(!t){
+    t = document.createElement('div');
+    t.id = '_toast';
+    t.style.cssText = 'position:fixed;bottom:24px;right:24px;padding:10px 20px;border-radius:10px;font-size:.82rem;font-weight:600;z-index:9999;transition:opacity .5s;pointer-events:none';
+    document.body.appendChild(t);
+  }
+  t.style.background = isError ? '#ef4444' : '#10b981';
+  t.style.color = '#fff';
+  t.style.opacity = '1';
+  t.textContent = msg;
+  clearTimeout(t._to);
+  t._to = setTimeout(()=>{ t.style.opacity='0'; }, 3000);
+}
+
+// Fetch current mode on load
+fetch('/api/mode').then(r=>r.json()).then(d=>applyModeUI(d.mode, d.iface)).catch(()=>{});
+</script>
+</body>
+</html>

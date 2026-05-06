@@ -216,3 +216,20 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# ── Project-specific ──────────────────────────────────────────────────────────
+
+# Runtime-generated data (CSV logs from packet capture / simulation)
+data/
+
+# Application log output
+logs/
+
+# Trained ML model artifacts (.pkl files are large binary files)
+models/
+
+# Keep the folder structure in the repo using placeholder files
+# (git doesn't track empty directories)
+!data/.gitkeep
+!logs/.gitkeep
+!models/.gitkeep
