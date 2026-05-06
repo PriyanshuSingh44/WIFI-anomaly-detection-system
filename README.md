@@ -183,7 +183,7 @@ python main.py --mode live --model Autoencoder
 | `/api/mode` | GET | Current capture mode & interfaces |
 | `/api/mode` | POST | Switch capture mode at runtime |
 
----
+----
 
 ## 🔧 Configuration
 
@@ -219,6 +219,6 @@ ATTACK_PROBABILITY  = 0.08           # 8% of simulated windows contain an attack
 
 This project is licensed under the [MIT License](LICENSE).
 
----
+----
 
 <p align="center">Built with 🛡️ for public Wi-Fi security research</p>.
