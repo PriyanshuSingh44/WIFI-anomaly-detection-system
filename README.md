@@ -221,4 +221,4 @@ This project is licensed under the [MIT License](LICENSE).
 
 ---
 
-<p align="center">Built with 🛡️ for public Wi-Fi security research</p>
+<p align="center">Built with 🛡️ for public Wi-Fi security research</p>.
