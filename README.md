@@ -143,9 +143,27 @@ python -c "from scapy.all import get_if_list; print(get_if_list())"
 python main.py --mode live
 ```
 
+### 5. Cloud Deployment (Split Architecture)
+
+You can deploy the Dashboard/Aggregator to the cloud (Render, AWS EC2, Linode) while running the Edge Node locally to monitor your physical Wi-Fi network.
+
+**Step 1: Deploy the Dashboard to the Cloud**
+Host the project repository on Render or AWS EC2. 
+- **Start Command:** `python main.py --mode live` (or `--mode simulated` for a portfolio demo).
+
+**Step 2: Run the Edge Node Locally**
+On your local machine (physically connected to the Wi-Fi you want to monitor), start the standalone edge node and point it to your deployed cloud URL:
+
+```bash
+# Run as Administrator for live packet capture
+python edge_node.py --url https://<YOUR-CLOUD-URL>/api/ingest
+```
+
 ---
 
 ## ⚙️ CLI Arguments
+
+### `main.py` (System Launcher)
 
 ```
 python main.py [--nodes N] [--port PORT] [--model MODEL] [--mode MODE]
@@ -167,6 +185,19 @@ python main.py --nodes 3 --model LOF --port 8080
 # Live capture with Autoencoder
 python main.py --mode live --model Autoencoder
 ```
+
+### `edge_node.py` (Standalone Edge Node)
+
+Used when separating the Aggregator (Cloud) from the Edge Node (Local).
+
+```bash
+python edge_node.py [--url URL] [--node-id ID]
+```
+
+| Argument | Default | Description |
+|---|---|---|
+| `--url` | `http://127.0.0.1:5000/api/ingest` | The remote Cloud Aggregator URL |
+| `--node-id` | `AP-01` | Identifier for this specific edge node |
 
 ---
 

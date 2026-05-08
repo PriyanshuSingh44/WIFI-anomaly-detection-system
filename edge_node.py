@@ -346,11 +346,20 @@ class EdgeNode(threading.Thread):
 
 if __name__ == "__main__":
     import colorama
+    import argparse
     colorama.init()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 
-    AGGREGATOR = f"http://127.0.0.1:{config.FLASK_PORT}/api/ingest"
-    node = EdgeNode("AP-TEST", AGGREGATOR)
+    parser = argparse.ArgumentParser(description="Standalone Wi-Fi Edge Node")
+    parser.add_argument("--url", type=str, default=f"http://127.0.0.1:{config.FLASK_PORT}/api/ingest", 
+                        help="Remote Aggregator URL (e.g., https://my-app.onrender.com/api/ingest)")
+    parser.add_argument("--node-id", type=str, default="AP-01", help="Identifier for this edge node")
+    args = parser.parse_args()
+
+    # When running standalone to monitor real Wi-Fi, force mode to live
+    set_capture_mode("live")
+
+    node = EdgeNode(args.node_id, args.url)
     node.start()
 
     try:
