@@ -214,7 +214,7 @@ python edge_node.py [--url URL] [--node-id ID]
 | `/api/mode` | GET | Current capture mode & interfaces |
 | `/api/mode` | POST | Switch capture mode at runtime |
 
----
+----
 
 ## 🔧 Configuration
 
@@ -248,8 +248,8 @@ ATTACK_PROBABILITY  = 0.08           # 8% of simulated windows contain an attack
 
 ## 📄 License
 
-This project is licensed under the [MIT License](LICENSE).
+This project is licensed under the [MIT License](LICENSE)
 
----
+----
 
-<p align="center">Built with 🛡️ for public Wi-Fi security research</p>.
+<p align="center">Built with 🛡️ for public Wi-Fi security research</p>
