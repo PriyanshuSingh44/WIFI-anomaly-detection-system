@@ -70,7 +70,7 @@ def ingest():
             return jsonify({"error": "empty payload"}), 400
 
         ground_truth = data.pop("_ground_truth", "unknown")
-        result       = engine.ingest(data)
+        result       = engine.ingest(data, ground_truth=ground_truth)
 
         record = {**data, "anomaly": result["anomaly"],
                   "score": result["score"], "threshold": result["threshold"],
@@ -173,6 +173,10 @@ def set_mode():
                 engine._windows_seen = 0
                 engine._is_trained   = False
                 engine.model         = None
+                
+                # Reset evaluation metrics too
+                engine._tp = engine._fp = engine._tn = engine._fn = 0
+                
             logger.info(f"[MODE] ML buffer reset — will retrain on '{mode}' traffic.")
             recent_data.clear()
             alerts.clear()
@@ -205,6 +209,7 @@ def _build_stats() -> dict:
         "by_node":         by_node,
         "capture_mode":    get_capture_mode(),
         "capture_iface":   get_capture_iface(),
+        "evaluation":      engine.get_metrics(),
     }
 
 

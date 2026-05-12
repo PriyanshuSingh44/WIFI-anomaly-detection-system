@@ -170,6 +170,34 @@ canvas{width:100%!important;max-height:220px}
     <div class="kpi-sub">Samples in rolling window</div>
   </div>
 
+  <div class="kpi" style="--kpi-color:#8b5cf6">
+    <div class="kpi-icon">🎯</div>
+    <div class="kpi-label">Accuracy</div>
+    <div class="kpi-value" id="kpi-accuracy">0%</div>
+    <div class="kpi-sub">Overall correct predictions</div>
+  </div>
+
+  <div class="kpi" style="--kpi-color:#ec4899">
+    <div class="kpi-icon">📌</div>
+    <div class="kpi-label">Precision</div>
+    <div class="kpi-value" id="kpi-precision">0%</div>
+    <div class="kpi-sub">True anomalies / Predicted anomalies</div>
+  </div>
+
+  <div class="kpi" style="--kpi-color:#14b8a6">
+    <div class="kpi-icon">🔍</div>
+    <div class="kpi-label">Recall</div>
+    <div class="kpi-value" id="kpi-recall">0%</div>
+    <div class="kpi-sub">True anomalies / Actual anomalies</div>
+  </div>
+
+  <div class="kpi" style="--kpi-color:#f59e0b">
+    <div class="kpi-icon">⚖️</div>
+    <div class="kpi-label">F1-Score</div>
+    <div class="kpi-value" id="kpi-f1">0%</div>
+    <div class="kpi-sub">Harmonic mean of prec. & recall</div>
+  </div>
+
   <!-- Score Timeline Chart -->
   <div class="chart-card">
     <div class="card-title">Anomaly Score Timeline</div>
@@ -233,12 +261,14 @@ function push(chart, label, value){
 }
 
 // ── Threshold line (anomaly boundary) ─────────────────────────────────
-function addThresholdAnnotation(chart, thresh){
-  if(!thresh) return;
+function addThresholdAnnotation(chart, thresh, color='#ef4444'){
+  if(thresh === null || thresh === undefined) return;
   const ds = chart.data.datasets;
   if(ds.length<2){
-    ds.push({label:'Threshold',data:[],borderColor:'#ef4444',borderDash:[4,4],
+    ds.push({label:'Threshold',data:[],borderColor:color,borderDash:[4,4],
       borderWidth:1.5,pointRadius:0,fill:false});
+  } else {
+    ds[1].borderColor = color;
   }
   const n = chart.data.labels.length;
   chart.data.datasets[1].data = Array(n).fill(thresh);
@@ -270,17 +300,30 @@ function addAlert(a){
   const no   = list.querySelector('.no-alerts');
   if(no) no.remove();
 
+  let sevText = 'Low level anomaly';
+  let sevColor = 'var(--accent)'; // Blue
+  let sevIcon = '⚠️';
+  if (a.score != null && a.threshold != null) {
+      const diff = a.threshold - a.score;
+      if (diff > 0.1) { sevText = 'High risk anomaly'; sevColor = 'var(--danger)'; sevIcon = '🚨'; }
+      else if (diff > 0.05) { sevText = 'Mid level anomaly'; sevColor = 'var(--warn)'; sevIcon = '⚡'; }
+  } else if (a.score != null) {
+      if (a.score < -0.75) { sevText = 'High risk anomaly'; sevColor = 'var(--danger)'; sevIcon = '🚨'; }
+      else if (a.score < -0.65) { sevText = 'Mid level anomaly'; sevColor = 'var(--warn)'; sevIcon = '⚡'; }
+  }
+
   const gt = a.ground_truth && a.ground_truth!=='normal' ? ` [${a.ground_truth}]` : '';
   const ts = new Date(a.timestamp).toLocaleTimeString();
   const div = document.createElement('div');
   div.className = 'alert-item';
+  div.style.borderLeftColor = sevColor;
   div.innerHTML = `
-    <span class="alert-sev"></span>
+    <span class="alert-sev" style="background:${sevColor}; box-shadow:0 0 8px ${sevColor}"></span>
     <div class="alert-body">
-      <div class="alert-node">🚨 ${a.node_id}${gt}</div>
-      <div class="alert-meta">${ts} · score ${a.score?.toFixed(4)??'N/A'}</div>
+      <div class="alert-node" style="color:${sevColor}">${sevIcon} ${a.node_id}${gt}</div>
+      <div class="alert-meta">${ts}</div>
     </div>
-    <div class="alert-score">⚡ ${a.score?.toFixed(4)??'?'}</div>`;
+    <div class="alert-score" style="color:${sevColor}; font-family:'Inter',sans-serif; text-transform:capitalize;">${sevText}</div>`;
   list.insertBefore(div, list.firstChild);
   if(list.children.length>50) list.removeChild(list.lastChild);
 }
@@ -294,6 +337,13 @@ socket.on('stats_update', s=>{
   document.getElementById('kpi-rate').textContent      = s.anomaly_rate+'%';
   document.getElementById('kpi-buffer').textContent    = s.buffer_size;
   document.getElementById('model-badge').textContent   = s.model;
+
+  if (s.evaluation) {
+    document.getElementById('kpi-accuracy').textContent  = (s.evaluation.accuracy * 100).toFixed(1) + '%';
+    document.getElementById('kpi-precision').textContent = (s.evaluation.precision * 100).toFixed(1) + '%';
+    document.getElementById('kpi-recall').textContent    = (s.evaluation.recall * 100).toFixed(1) + '%';
+    document.getElementById('kpi-f1').textContent        = (s.evaluation.f1_score * 100).toFixed(1) + '%';
+  }
 
   const banner = document.getElementById('training-banner');
   const minSamples = s.min_samples || 80;
@@ -337,12 +387,19 @@ async function fetchRecent(){
     const thresh = data[data.length-1]?.threshold??null;
     scoreChart.data.labels = data.map((_,i)=>i);
     scoreChart.data.datasets[0].data = data.map(d=>d.score??null);
-    addThresholdAnnotation(scoreChart, thresh);
+    addThresholdAnnotation(scoreChart, thresh, '#ef4444');
 
     // Pkt size chart
     pktChart.data.labels = data.map((_,i)=>i);
-    pktChart.data.datasets[0].data = data.map(d=>d.mean_pkt_size??0);
-    pktChart.update('none');
+    const pktData = data.map(d=>d.mean_pkt_size??0);
+    pktChart.data.datasets[0].data = pktData;
+    if (pktData.length > 0) {
+      const avgPkt = pktData.reduce((a, b) => a + b, 0) / pktData.length;
+      const pktThresh = avgPkt * 1.5; // Adaptive green line to show spikes
+      addThresholdAnnotation(pktChart, pktThresh, '#10b981');
+    } else {
+      pktChart.update('none');
+    }
 
     // Protocol donut averages
     const n = data.length||1;

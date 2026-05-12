@@ -160,6 +160,12 @@ class AnomalyEngine:
         self._lock             = threading.Lock()
         self._is_trained       = False
         self._dynamic_threshold = None   # set from real training-data scores
+        
+        # ── Evaluation Metrics ──
+        self._tp = 0
+        self._fp = 0
+        self._tn = 0
+        self._fn = 0
 
         logger.info(f"AnomalyEngine initialised | model={model_name}")
 
@@ -269,10 +275,10 @@ class AnomalyEngine:
 
     # ── Public API ────────────────────────────────────────────────────────────
 
-    def ingest(self, feature_vec: dict) -> dict:
+    def ingest(self, feature_vec: dict, ground_truth: str = "unknown") -> dict:
         """
         Accept one feature vector from an edge node.
-        Returns a result dict with anomaly flag, score, and threshold used.
+        Returns a result dict with anomaly flag, score, threshold used, and metrics.
         """
         with self._lock:
             # ── Skip all-zero vectors (live mode: no packets captured in window) ──
@@ -312,14 +318,49 @@ class AnomalyEngine:
             thresh     = (self._dynamic_threshold
                           if self._dynamic_threshold is not None
                           else self.threshold.current())
-            is_anomaly = score < thresh
+            is_anomaly = bool(score < thresh)
+
+            # ── Update Metrics (if ground truth is available and not unknown/live) ──
+            if ground_truth not in ["unknown", "live"]:
+                # Real attack means ground_truth is not 'normal' and not 'real'
+                is_actual_anomaly = ground_truth not in ["normal", "real"]
+                if is_anomaly and is_actual_anomaly:
+                    self._tp += 1
+                elif is_anomaly and not is_actual_anomaly:
+                    self._fp += 1
+                elif not is_anomaly and not is_actual_anomaly:
+                    self._tn += 1
+                elif not is_anomaly and is_actual_anomaly:
+                    self._fn += 1
 
             return {
-                "anomaly":   bool(is_anomaly),
+                "anomaly":   is_anomaly,
                 "score":     round(score, 6),
                 "threshold": round(thresh, 6),
                 "status":    "active",
             }
+
+    def get_metrics(self) -> dict:
+        """Calculate and return precision, recall, f1, and accuracy."""
+        total = self._tp + self._fp + self._tn + self._fn
+        if total == 0:
+            return {"accuracy": 0.0, "precision": 0.0, "recall": 0.0, "f1_score": 0.0, "tp": 0, "fp": 0, "tn": 0, "fn": 0}
+        
+        accuracy = (self._tp + self._tn) / total
+        precision = self._tp / (self._tp + self._fp) if (self._tp + self._fp) > 0 else 0.0
+        recall = self._tp / (self._tp + self._fn) if (self._tp + self._fn) > 0 else 0.0
+        f1_score = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
+        
+        return {
+            "accuracy": round(accuracy, 4),
+            "precision": round(precision, 4),
+            "recall": round(recall, 4),
+            "f1_score": round(f1_score, 4),
+            "tp": self._tp,
+            "fp": self._fp,
+            "tn": self._tn,
+            "fn": self._fn
+        }
 
     @property
     def is_trained(self) -> bool:
