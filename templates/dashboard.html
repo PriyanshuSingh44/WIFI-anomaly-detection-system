@@ -170,32 +170,34 @@ canvas{width:100%!important;max-height:220px}
     <div class="kpi-sub">Samples in rolling window</div>
   </div>
 
-  <div class="kpi" style="--kpi-color:#8b5cf6">
-    <div class="kpi-icon">🎯</div>
-    <div class="kpi-label">Accuracy</div>
-    <div class="kpi-value" id="kpi-accuracy">0%</div>
-    <div class="kpi-sub">Overall correct predictions</div>
-  </div>
+  <div id="eval-metrics" style="display: contents;">
+    <div class="kpi" style="--kpi-color:#8b5cf6">
+      <div class="kpi-icon">🎯</div>
+      <div class="kpi-label">Accuracy</div>
+      <div class="kpi-value" id="kpi-accuracy">0%</div>
+      <div class="kpi-sub">Overall correct predictions</div>
+    </div>
 
-  <div class="kpi" style="--kpi-color:#ec4899">
-    <div class="kpi-icon">📌</div>
-    <div class="kpi-label">Precision</div>
-    <div class="kpi-value" id="kpi-precision">0%</div>
-    <div class="kpi-sub">True anomalies / Predicted anomalies</div>
-  </div>
+    <div class="kpi" style="--kpi-color:#ec4899">
+      <div class="kpi-icon">📌</div>
+      <div class="kpi-label">Precision</div>
+      <div class="kpi-value" id="kpi-precision">0%</div>
+      <div class="kpi-sub">True anomalies / Predicted anomalies</div>
+    </div>
 
-  <div class="kpi" style="--kpi-color:#14b8a6">
-    <div class="kpi-icon">🔍</div>
-    <div class="kpi-label">Recall</div>
-    <div class="kpi-value" id="kpi-recall">0%</div>
-    <div class="kpi-sub">True anomalies / Actual anomalies</div>
-  </div>
+    <div class="kpi" style="--kpi-color:#14b8a6">
+      <div class="kpi-icon">🔍</div>
+      <div class="kpi-label">Recall</div>
+      <div class="kpi-value" id="kpi-recall">0%</div>
+      <div class="kpi-sub">True anomalies / Actual anomalies</div>
+    </div>
 
-  <div class="kpi" style="--kpi-color:#f59e0b">
-    <div class="kpi-icon">⚖️</div>
-    <div class="kpi-label">F1-Score</div>
-    <div class="kpi-value" id="kpi-f1">0%</div>
-    <div class="kpi-sub">Harmonic mean of prec. & recall</div>
+    <div class="kpi" style="--kpi-color:#f59e0b">
+      <div class="kpi-icon">⚖️</div>
+      <div class="kpi-label">F1-Score</div>
+      <div class="kpi-value" id="kpi-f1">0%</div>
+      <div class="kpi-sub">Harmonic mean of prec. & recall</div>
+    </div>
   </div>
 
   <!-- Score Timeline Chart -->
@@ -343,6 +345,11 @@ socket.on('stats_update', s=>{
     document.getElementById('kpi-precision').textContent = (s.evaluation.precision * 100).toFixed(1) + '%';
     document.getElementById('kpi-recall').textContent    = (s.evaluation.recall * 100).toFixed(1) + '%';
     document.getElementById('kpi-f1').textContent        = (s.evaluation.f1_score * 100).toFixed(1) + '%';
+  }
+
+  const evalMetrics = document.getElementById('eval-metrics');
+  if (evalMetrics) {
+    evalMetrics.style.display = s.capture_mode === 'live' ? 'none' : 'contents';
   }
 
   const banner = document.getElementById('training-banner');
